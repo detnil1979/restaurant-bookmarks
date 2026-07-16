@@ -6,8 +6,8 @@ const m = html.match(/\/\/ ==== \[passerby:pure:start\][\s\S]*?\/\/ ==== \[passe
 assert.ok(m, 'marker block not found in index.html');
 
 // 以 new Function 於同一 realm 執行標記區塊（node:vm 會產生跨 realm 的 Array，導致 deepEqual 誤判）
-const { parseCsv, deriveRegion, buildMapsUrl, transformPassersby, categoryMatches, reservePasserbySlots, PASSERBY_SNAPSHOT, PASSERBY_SHEET } =
-  new Function(m[0] + '\n;return { parseCsv, deriveRegion, buildMapsUrl, transformPassersby, categoryMatches, reservePasserbySlots, PASSERBY_SNAPSHOT, PASSERBY_SHEET };')();
+const { parseCsv, deriveRegion, buildMapsUrl, transformPassersby, categoryMatches, reservePasserbySlots, shortStar, groupByRegion, PASSERBY_SNAPSHOT, PASSERBY_SHEET } =
+  new Function(m[0] + '\n;return { parseCsv, deriveRegion, buildMapsUrl, transformPassersby, categoryMatches, reservePasserbySlots, shortStar, groupByRegion, PASSERBY_SNAPSHOT, PASSERBY_SHEET };')();
 
 let n = 0;
 function t(name, fn) { fn(); n++; console.log('ok -', name); }
@@ -99,6 +99,31 @@ t('reservePasserbySlots: passerby already in top / absent → unchanged', () => 
   assert.deepEqual(reservePasserbySlots(inTop, 10, 2), inTop);
   const noPb = Array.from({ length: 12 }, (_, i) => ({ d: { name: 'own' + i }, score: 12 - i }));
   assert.deepEqual(reservePasserbySlots(noPb, 10, 2), noPb.slice(0, 10));
+});
+
+t('shortStar: rated and unrated', () => {
+  assert.equal(shortStar({ rating: 4.86 }), '★ 4.9');
+  assert.equal(shortStar({ rating: 5 }), '★ 5.0');
+  assert.equal(shortStar({ rating: null }), null);
+  assert.equal(shortStar({}), null);
+});
+
+t('groupByRegion: count-desc order, inner sort, immutability', () => {
+  const rs = [
+    { name: 'b', region: '大安', rating: 4 },
+    { name: 'a', region: '大安', rating: null },
+    { name: 'c', region: '中山', rating: 5 },
+    { name: 'd', region: '大安', rating: 4.5 },
+  ];
+  const snapshot = JSON.stringify(rs);
+  const g = groupByRegion(rs, 'rating');
+  assert.deepEqual(g.map(x => x.region), ['大安', '中山']);
+  assert.deepEqual(g[0].items.map(x => x.name), ['d', 'b', 'a']);
+  const byName = groupByRegion(rs, 'name');
+  assert.deepEqual(byName[0].items.map(x => x.name), ['a', 'b', 'd']);
+  assert.equal(JSON.stringify(rs), snapshot);
+  const tie = groupByRegion([{ name: 'x', region: '信義' }, { name: 'y', region: '中山' }], 'name');
+  assert.deepEqual(tie.map(x => x.region), ['中山', '信義']);
 });
 
 t('sheet constants present', () => {
