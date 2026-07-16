@@ -1,0 +1,109 @@
+import { readFileSync } from 'node:fs';
+import assert from 'node:assert/strict';
+
+const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+const m = html.match(/\/\/ ==== \[passerby:pure:start\][\s\S]*?\/\/ ==== \[passerby:pure:end\]/);
+assert.ok(m, 'marker block not found in index.html');
+
+// 以 new Function 於同一 realm 執行標記區塊（node:vm 會產生跨 realm 的 Array，導致 deepEqual 誤判）
+const { parseCsv, deriveRegion, buildMapsUrl, transformPassersby, categoryMatches, reservePasserbySlots, PASSERBY_SNAPSHOT, PASSERBY_SHEET } =
+  new Function(m[0] + '\n;return { parseCsv, deriveRegion, buildMapsUrl, transformPassersby, categoryMatches, reservePasserbySlots, PASSERBY_SNAPSHOT, PASSERBY_SHEET };')();
+
+let n = 0;
+function t(name, fn) { fn(); n++; console.log('ok -', name); }
+
+t('parseCsv: plain rows', () => {
+  assert.deepEqual(parseCsv('a,b\nc,d'), [['a', 'b'], ['c', 'd']]);
+});
+
+t('parseCsv: quoted commas, escaped quotes, embedded newline, CRLF', () => {
+  assert.deepEqual(
+    parseCsv('"x,y","he said ""hi""","l1\nl2"\r\np,q,r'),
+    [['x,y', 'he said "hi"', 'l1\nl2'], ['p', 'q', 'r']]
+  );
+});
+
+t('parseCsv: strips BOM', () => {
+  assert.deepEqual(parseCsv('\uFEFF店名,類別\nA,B'), [['店名', '類別'], ['A', 'B']]);
+});
+
+t('deriveRegion: districts and fallbacks', () => {
+  assert.equal(deriveRegion('台北市士林區劍潭路80號1樓'), '士林');
+  assert.equal(deriveRegion('新北市三重區仁愛街16號1樓'), '三重');
+  assert.equal(deriveRegion('臺北市大安區x'), '大安');
+  assert.equal(deriveRegion('台北市某某路1號'), '台北');
+  assert.equal(deriveRegion(null), '未標示地區');
+});
+
+t('buildMapsUrl: with and without address', () => {
+  assert.equal(
+    buildMapsUrl('Hi MATE', '台北市士林區劍潭路80號1樓'),
+    'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent('Hi MATE 台北市士林區劍潭路80號1樓')
+  );
+  assert.equal(
+    buildMapsUrl('國秀', null),
+    'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent('國秀')
+  );
+});
+
+t('transformPassersby: full snapshot', () => {
+  const recs = transformPassersby(PASSERBY_SNAPSHOT.rows);
+  assert.equal(recs.length, 84);
+  assert.equal(new Set(recs.map(r => r.id)).size, 84);
+  for (const r of recs) {
+    assert.equal(r.source, 'passerby');
+    assert.deepEqual(r.lists, ['路人推薦']);
+    assert.equal(r.rating, null);
+    assert.ok(r.name.length > 0);
+    assert.ok(r.url.startsWith('https://www.google.com/maps/search/?api=1&query='));
+  }
+  const byName = Object.fromEntries(recs.map(r => [r.name, r]));
+  assert.equal(byName['Hi MATE'].region, '士林');
+  assert.equal(byName['煙幕府'].region, '三重');
+  assert.equal(byName['國秀'].address, null);
+  assert.equal(byName['國秀'].region, '未標示地區');
+  assert.equal(byName['Toasteria Cafe'].address, null);
+  assert.equal(byName['麗芳老樓'].category, null);
+  assert.equal(byName['八條老宅'].note, '查得同名店家實際為麻辣鍋/鴨血臭豆腐；與「臭豆腐」分類略有出入；建議確認');
+  assert.ok(byName['M&CO']);
+});
+
+t('transformPassersby: skips header row and blank names', () => {
+  const recs = transformPassersby([['店名', '類別', '地址', '備註'], ['', 'x', 'y'], ['真店', '麵食', '台北市大安區a路1號']]);
+  assert.equal(recs.length, 1);
+  assert.equal(recs[0].name, '真店');
+});
+
+t('categoryMatches: own exact + passerby keyword + no cats', () => {
+  const KW = { '燒烤/鐵板燒': ['燒烤', '烤肉', '鐵板燒', 'bbq', '燒肉'] };
+  assert.equal(categoryMatches({ category: '燒烤/鐵板燒' }, ['燒烤/鐵板燒'], KW), true);
+  assert.equal(categoryMatches({ source: 'passerby', category: '燒肉' }, ['燒烤/鐵板燒'], KW), true);
+  assert.equal(categoryMatches({ source: 'passerby', category: '板前燒肉' }, ['燒烤/鐵板燒'], KW), true);
+  assert.equal(categoryMatches({ source: 'passerby', category: '甜點(布丁)' }, ['燒烤/鐵板燒'], KW), false);
+  assert.equal(categoryMatches({ source: 'passerby', category: null }, ['燒烤/鐵板燒'], KW), false);
+  assert.equal(categoryMatches({ category: '燒烤/鐵板燒' }, [], KW), false);
+});
+
+t('reservePasserbySlots: buried passerby entries get up to 2 tail slots', () => {
+  const own = Array.from({ length: 12 }, (_, i) => ({ d: { name: 'own' + i }, score: 12 - i }));
+  const pb = [{ d: { name: 'pb1', source: 'passerby' }, score: 5 }, { d: { name: 'pb2', source: 'passerby' }, score: 4.5 }];
+  const scored = own.concat(pb).sort((a, b) => b.score - a.score);
+  const top = reservePasserbySlots(scored, 10, 2);
+  assert.equal(top.length, 10);
+  assert.deepEqual(top.slice(8).map(x => x.d.name), ['pb1', 'pb2']);
+  assert.equal(top.filter(x => x.d.source === 'passerby').length, 2);
+});
+
+t('reservePasserbySlots: passerby already in top / absent → unchanged', () => {
+  const inTop = [{ d: { name: 'pb', source: 'passerby' }, score: 9 }, { d: { name: 'o1' }, score: 8 }, { d: { name: 'o2' }, score: 7 }];
+  assert.deepEqual(reservePasserbySlots(inTop, 10, 2), inTop);
+  const noPb = Array.from({ length: 12 }, (_, i) => ({ d: { name: 'own' + i }, score: 12 - i }));
+  assert.deepEqual(reservePasserbySlots(noPb, 10, 2), noPb.slice(0, 10));
+});
+
+t('sheet constants present', () => {
+  assert.equal(PASSERBY_SHEET.id, '1XqOiho7B5SauaFsfh-afi2faNkNXFJ9HV4tFkqrGkPY');
+  assert.equal(PASSERBY_SHEET.gid, '1065289423');
+});
+
+console.log(`\n${n} tests passed`);
