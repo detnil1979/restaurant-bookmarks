@@ -6,8 +6,8 @@ const m = html.match(/\/\/ ==== \[passerby:pure:start\][\s\S]*?\/\/ ==== \[passe
 assert.ok(m, 'marker block not found in index.html');
 
 // 以 new Function 於同一 realm 執行標記區塊（node:vm 會產生跨 realm 的 Array，導致 deepEqual 誤判）
-const { parseCsv, deriveRegion, buildMapsUrl, transformPassersby, categoryMatches, reservePasserbySlots, shortStar, groupByRegion, PASSERBY_SNAPSHOT, PASSERBY_SHEET } =
-  new Function(m[0] + '\n;return { parseCsv, deriveRegion, buildMapsUrl, transformPassersby, categoryMatches, reservePasserbySlots, shortStar, groupByRegion, PASSERBY_SNAPSHOT, PASSERBY_SHEET };')();
+const { parseCsv, deriveRegion, buildMapsUrl, transformPassersby, categoryMatches, reservePasserbySlots, shortStar, groupByRegion, queryCategoryHit, QUERY_AMBIGUOUS, blogLinkFor, BLOG_LINKS, PASSERBY_SNAPSHOT, PASSERBY_SHEET } =
+  new Function(m[0] + '\n;return { parseCsv, deriveRegion, buildMapsUrl, transformPassersby, categoryMatches, reservePasserbySlots, shortStar, groupByRegion, queryCategoryHit, QUERY_AMBIGUOUS, blogLinkFor, BLOG_LINKS, PASSERBY_SNAPSHOT, PASSERBY_SHEET };')();
 
 let n = 0;
 function t(name, fn) { fn(); n++; console.log('ok -', name); }
@@ -124,6 +124,65 @@ t('groupByRegion: count-desc order, inner sort, immutability', () => {
   assert.equal(JSON.stringify(rs), snapshot);
   const tie = groupByRegion([{ name: 'x', region: '信義' }, { name: 'y', region: '中山' }], 'name');
   assert.deepEqual(tie.map(x => x.region), ['中山', '信義']);
+});
+
+t('categoryMatches: 誤導詞不再造成錯誤配對,正確配對保留', () => {
+  const KW = {
+    '火鍋/鍋物': ['火鍋', '鍋', '麻辣', '涮涮鍋', '薑母鴨', '羊肉爐'],
+    '泰越料理': ['泰式', '泰國', '越南', '河粉', '酸辣'],
+    '義式/西式': ['義大利', 'pizza', '披薩', '牛排', '漢堡', '美式', '酒吧', '餐酒館'],
+    '韓式料理': ['韓式', '韓國', '部隊鍋', '烤肉'],
+    '燒烤/鐵板燒': ['燒烤', '烤肉', '鐵板燒', 'bbq', '燒肉'],
+    '小吃/麵食': ['小吃', '麵', '牛肉麵', '便當', '平價'],
+  };
+  const pb = c => ({ source: 'passerby', category: c });
+  assert.equal(categoryMatches(pb('小吃(鍋貼/綠豆湯)'), ['火鍋/鍋物'], KW), false);
+  assert.equal(categoryMatches(pb('江浙菜(酸菜白肉鍋)'), ['火鍋/鍋物'], KW), true);
+  assert.equal(categoryMatches(pb('酸辣粉'), ['泰越料理'], KW), false);
+  assert.equal(categoryMatches(pb('川菜小吃(酸辣粉)'), ['小吃/麵食'], KW), true);
+  assert.equal(categoryMatches(pb('日式漢堡排'), ['義式/西式'], KW), false);
+  assert.equal(categoryMatches(pb('烤肉飯'), ['韓式料理'], KW), false);
+  assert.equal(categoryMatches(pb('烤肉飯'), ['燒烤/鐵板燒'], KW), false);
+  assert.equal(categoryMatches(pb('韓式烤肉'), ['韓式料理'], KW), true);
+  assert.equal(categoryMatches(pb('麵包店'), ['小吃/麵食'], KW), false);
+  assert.equal(categoryMatches(pb('刀削麵'), ['小吃/麵食'], KW), true);
+});
+
+t('queryCategoryHit: 查詢文字直接命中分類詞元', () => {
+  const pb = c => ({ source: 'passerby', category: c });
+  assert.equal(queryCategoryHit(pb('小吃(鍋貼/綠豆湯)'), '想吃鍋貼'), true);
+  assert.equal(queryCategoryHit(pb('甜點(吉拿棒)'), '想吃吉拿棒'), true);
+  assert.equal(queryCategoryHit(pb('日式漢堡排'), '想吃漢堡排'), true);
+  assert.equal(queryCategoryHit(pb('日式漢堡排'), '想吃漢堡'), false);
+  assert.equal(queryCategoryHit(pb('小吃(鍋貼/綠豆湯)'), '想吃火鍋'), false);
+  assert.equal(queryCategoryHit({ category: '火鍋/鍋物' }, '想吃火鍋'), true);
+  assert.equal(queryCategoryHit({ category: null, source: 'passerby' }, '想吃火鍋'), false);
+});
+
+t('QUERY_AMBIGUOUS: 新增的誤導詞在表內', () => {
+  for (const w of ['鍋貼', '酸辣粉', '漢堡排', '烤肉飯', '麵包']) {
+    assert.ok(QUERY_AMBIGUOUS.includes(w), w + ' missing');
+  }
+});
+
+t('blogLinkFor: 命中愛食記 / 後備搜尋連結', () => {
+  const links = { '鼎旺|大安': { url: 'https://ifoodie.tw/restaurant/559d8df2c03a103ee86c88a9' } };
+  const hit = blogLinkFor({ name: '鼎旺', region: '大安' }, links);
+  assert.deepEqual(hit, { kind: 'ifoodie', url: 'https://ifoodie.tw/restaurant/559d8df2c03a103ee86c88a9' });
+  const fb = blogLinkFor({ name: '立秋 Li chiu', region: '大安', address: '台北市大安區辛亥路二段171巷9號1樓' }, links);
+  assert.equal(fb.kind, 'search');
+  assert.ok(fb.url.startsWith('https://www.google.com/search?q='));
+  assert.ok(fb.url.includes(encodeURIComponent('食記')));
+  assert.ok(fb.url.includes(encodeURIComponent('台北市大安區辛')));
+  const noAddr = blogLinkFor({ name: '國秀', region: '未標示地區', address: null }, links);
+  assert.equal(noAddr.kind, 'search');
+  assert.equal(noAddr.url, 'https://www.google.com/search?q=' + encodeURIComponent('國秀 食記'));
+});
+
+t('BLOG_LINKS: 所有連結皆為愛食記店頁', () => {
+  for (const [k, v] of Object.entries(BLOG_LINKS)) {
+    assert.ok(v.url.startsWith('https://ifoodie.tw/restaurant/'), k);
+  }
 });
 
 t('sheet constants present', () => {
