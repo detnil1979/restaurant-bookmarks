@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+const threadsCsv = readFileSync(new URL('../data/threads_taipei_restaurants_2026-07-21.csv', import.meta.url), 'utf8');
 const m = html.match(/\/\/ ==== \[passerby:pure:start\][\s\S]*?\/\/ ==== \[passerby:pure:end\]/);
 assert.ok(m, 'marker block not found in index.html');
 
@@ -77,19 +78,42 @@ t('transformPassersby: skips header row and blank names', () => {
 t('transformThreads: full snapshot keeps source attribution', () => {
   const recs = transformThreads(THREADS_SNAPSHOT.rows);
   assert.equal(THREADS_SNAPSHOT.date, '2026-07-21');
+  assert.equal(THREADS_SNAPSHOT.verified, 140);
+  assert.equal(THREADS_SNAPSHOT.pending, 38);
   assert.equal(recs.length, 178);
   assert.equal(new Set(recs.map(r => r.id)).size, 178);
   assert.equal(new Set(recs.map(r => r.name)).size, 178);
   for (const r of recs) {
     assert.equal(r.source, 'threads');
     assert.deepEqual(r.lists, ['Threads推薦']);
-    assert.ok(r.url.startsWith('https://www.google.com/maps/search/?api=1&query='));
+    assert.ok(r.url.startsWith('https://www.google.com/maps/'));
     assert.ok(r.thread_url?.startsWith('https://www.threads.com/'));
+    assert.ok(['已查證', '待確認'].includes(r.verification_status));
   }
+  assert.equal(recs.filter(r => r.verification_status === '已查證').length, 140);
+  assert.equal(recs.filter(r => r.verification_status === '待確認').length, 38);
+  assert.equal(recs.filter(r => r.rating_source === 'google_live').length, 140);
   const byName = Object.fromEntries(recs.map(r => [r.name, r]));
   assert.equal(byName['26am 餐酒館'].region, '中山');
   assert.equal(byName['26am 餐酒館'].recommender, '26a.mrestaurant');
+  assert.equal(byName['26am 餐酒館'].category, '日式料理');
+  assert.equal(byName['26am 餐酒館'].rating, 5);
+  assert.equal(byName['26am 餐酒館'].google_name.startsWith('26am 凌晨兩點'), true);
+  assert.equal(byName['26am 餐酒館'].verification_status, '已查證');
+  assert.equal(byName['7-ELEVEN i珍食'].verification_status, '待確認');
+  assert.equal(byName['7-ELEVEN i珍食'].rating, null);
   assert.equal(byName['八條老宅麻辣鍋'].note, '老宅巷弄；麻辣湯頭、鴨血豆腐');
+  assert.equal(byName['八條老宅麻辣鍋'].category, '火鍋/鍋物');
+  assert.equal(byName['八條老宅麻辣鍋'].address, '104臺北市中山區正義里林森北路133巷3號');
+});
+
+t('Threads CSV: enriched schema matches embedded snapshot', () => {
+  const rows = parseCsv(threadsCsv);
+  assert.equal(rows.length, 179);
+  assert.equal(rows[0].length, 19);
+  assert.deepEqual(rows, THREADS_SNAPSHOT.rows.map(row => row.map(value => String(value))));
+  assert.equal(rows.filter(r => r[17] === '已查證').length, 140);
+  assert.equal(rows.filter(r => r[17] === '待確認').length, 38);
 });
 
 t('isCommunitySource: passerby and Threads are community sources', () => {
