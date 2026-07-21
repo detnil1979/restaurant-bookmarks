@@ -6,8 +6,8 @@ const m = html.match(/\/\/ ==== \[passerby:pure:start\][\s\S]*?\/\/ ==== \[passe
 assert.ok(m, 'marker block not found in index.html');
 
 // 以 new Function 於同一 realm 執行標記區塊（node:vm 會產生跨 realm 的 Array，導致 deepEqual 誤判）
-const { parseCsv, deriveRegion, buildMapsUrl, transformPassersby, categoryMatches, reservePasserbySlots, shortStar, groupByRegion, queryCategoryHit, QUERY_AMBIGUOUS, blogLinkFor, BLOG_LINKS, PASSERBY_SNAPSHOT, PASSERBY_SHEET } =
-  new Function(m[0] + '\n;return { parseCsv, deriveRegion, buildMapsUrl, transformPassersby, categoryMatches, reservePasserbySlots, shortStar, groupByRegion, queryCategoryHit, QUERY_AMBIGUOUS, blogLinkFor, BLOG_LINKS, PASSERBY_SNAPSHOT, PASSERBY_SHEET };')();
+const { parseCsv, deriveRegion, buildMapsUrl, transformPassersby, transformThreads, isCommunitySource, categoryMatches, reservePasserbySlots, shortStar, groupByRegion, queryCategoryHit, QUERY_AMBIGUOUS, blogLinkFor, BLOG_LINKS, PASSERBY_SNAPSHOT, PASSERBY_SHEET, THREADS_SNAPSHOT } =
+  new Function(m[0] + '\n;return { parseCsv, deriveRegion, buildMapsUrl, transformPassersby, transformThreads, isCommunitySource, categoryMatches, reservePasserbySlots, shortStar, groupByRegion, queryCategoryHit, QUERY_AMBIGUOUS, blogLinkFor, BLOG_LINKS, PASSERBY_SNAPSHOT, PASSERBY_SHEET, THREADS_SNAPSHOT };')();
 
 let n = 0;
 function t(name, fn) { fn(); n++; console.log('ok -', name); }
@@ -74,11 +74,36 @@ t('transformPassersby: skips header row and blank names', () => {
   assert.equal(recs[0].name, '真店');
 });
 
+t('transformThreads: full snapshot keeps source attribution', () => {
+  const recs = transformThreads(THREADS_SNAPSHOT.rows);
+  assert.equal(THREADS_SNAPSHOT.date, '2026-07-21');
+  assert.equal(recs.length, 178);
+  assert.equal(new Set(recs.map(r => r.id)).size, 178);
+  assert.equal(new Set(recs.map(r => r.name)).size, 178);
+  for (const r of recs) {
+    assert.equal(r.source, 'threads');
+    assert.deepEqual(r.lists, ['Threads推薦']);
+    assert.ok(r.url.startsWith('https://www.google.com/maps/search/?api=1&query='));
+    assert.ok(r.thread_url?.startsWith('https://www.threads.com/'));
+  }
+  const byName = Object.fromEntries(recs.map(r => [r.name, r]));
+  assert.equal(byName['26am 餐酒館'].region, '中山');
+  assert.equal(byName['26am 餐酒館'].recommender, '26a.mrestaurant');
+  assert.equal(byName['八條老宅麻辣鍋'].note, '老宅巷弄；麻辣湯頭、鴨血豆腐');
+});
+
+t('isCommunitySource: passerby and Threads are community sources', () => {
+  assert.equal(isCommunitySource({ source: 'passerby' }), true);
+  assert.equal(isCommunitySource({ source: 'threads' }), true);
+  assert.equal(isCommunitySource({}), false);
+});
+
 t('categoryMatches: own exact + passerby keyword + no cats', () => {
   const KW = { '燒烤/鐵板燒': ['燒烤', '烤肉', '鐵板燒', 'bbq', '燒肉'] };
   assert.equal(categoryMatches({ category: '燒烤/鐵板燒' }, ['燒烤/鐵板燒'], KW), true);
   assert.equal(categoryMatches({ source: 'passerby', category: '燒肉' }, ['燒烤/鐵板燒'], KW), true);
   assert.equal(categoryMatches({ source: 'passerby', category: '板前燒肉' }, ['燒烤/鐵板燒'], KW), true);
+  assert.equal(categoryMatches({ source: 'threads', category: '燒肉' }, ['燒烤/鐵板燒'], KW), true);
   assert.equal(categoryMatches({ source: 'passerby', category: '甜點(布丁)' }, ['燒烤/鐵板燒'], KW), false);
   assert.equal(categoryMatches({ source: 'passerby', category: null }, ['燒烤/鐵板燒'], KW), false);
   assert.equal(categoryMatches({ category: '燒烤/鐵板燒' }, [], KW), false);
@@ -99,6 +124,13 @@ t('reservePasserbySlots: passerby already in top / absent → unchanged', () => 
   assert.deepEqual(reservePasserbySlots(inTop, 10, 2), inTop);
   const noPb = Array.from({ length: 12 }, (_, i) => ({ d: { name: 'own' + i }, score: 12 - i }));
   assert.deepEqual(reservePasserbySlots(noPb, 10, 2), noPb.slice(0, 10));
+});
+
+t('reservePasserbySlots: Threads recommendations also receive community slots', () => {
+  const own = Array.from({ length: 12 }, (_, i) => ({ d: { name: 'own' + i }, score: 12 - i }));
+  const tr = [{ d: { name: 'tr1', source: 'threads' }, score: 5 }];
+  const top = reservePasserbySlots(own.concat(tr).sort((a, b) => b.score - a.score), 10, 2);
+  assert.ok(top.some(x => x.d.name === 'tr1'));
 });
 
 t('shortStar: rated and unrated', () => {
