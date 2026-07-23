@@ -7,8 +7,8 @@ const m = html.match(/\/\/ ==== \[passerby:pure:start\][\s\S]*?\/\/ ==== \[passe
 assert.ok(m, 'marker block not found in index.html');
 
 // 以 new Function 於同一 realm 執行標記區塊（node:vm 會產生跨 realm 的 Array，導致 deepEqual 誤判）
-const { parseCsv, deriveRegion, buildMapsUrl, transformPassersby, transformThreads, isCommunitySource, categoryMatches, reservePasserbySlots, shortStar, groupByRegion, queryCategoryHit, QUERY_AMBIGUOUS, blogLinkFor, BLOG_LINKS, PASSERBY_SNAPSHOT, PASSERBY_SHEET, THREADS_SNAPSHOT } =
-  new Function(m[0] + '\n;return { parseCsv, deriveRegion, buildMapsUrl, transformPassersby, transformThreads, isCommunitySource, categoryMatches, reservePasserbySlots, shortStar, groupByRegion, queryCategoryHit, QUERY_AMBIGUOUS, blogLinkFor, BLOG_LINKS, PASSERBY_SNAPSHOT, PASSERBY_SHEET, THREADS_SNAPSHOT };')();
+const { parseCsv, deriveRegion, buildMapsUrl, transformPassersby, transformThreads, isCommunitySource, categoryMatches, reservePasserbySlots, shortStar, groupByRegion, queryCategoryHit, QUERY_AMBIGUOUS, blogLinkFor, BLOG_LINKS, PASSERBY_SNAPSHOT, PASSERBY_SHEET, THREADS_SNAPSHOT, encodeSharePayload, decodeSharePayload } =
+  new Function(m[0] + '\n;return { parseCsv, deriveRegion, buildMapsUrl, transformPassersby, transformThreads, isCommunitySource, categoryMatches, reservePasserbySlots, shortStar, groupByRegion, queryCategoryHit, QUERY_AMBIGUOUS, blogLinkFor, BLOG_LINKS, PASSERBY_SNAPSHOT, PASSERBY_SHEET, THREADS_SNAPSHOT, encodeSharePayload, decodeSharePayload };')();
 
 let n = 0;
 function t(name, fn) { fn(); n++; console.log('ok -', name); }
@@ -45,6 +45,14 @@ t('buildMapsUrl: with and without address', () => {
     buildMapsUrl('國秀', null),
     'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent('國秀')
   );
+});
+
+t('share payload: round-trips Traditional Chinese notes and rejects invalid data', () => {
+  const payload = { v: 1, id: 'tr-9', note: '純粹好吃，會再來！', photoUrl: 'https://example.com/food.jpg' };
+  const encoded = encodeSharePayload(payload);
+  assert.match(encoded, /^[A-Za-z0-9_-]+$/);
+  assert.deepEqual(decodeSharePayload(encoded), payload);
+  assert.equal(decodeSharePayload('%%%'), null);
 });
 
 t('transformPassersby: full snapshot', () => {
