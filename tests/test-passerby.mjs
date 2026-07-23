@@ -7,8 +7,8 @@ const m = html.match(/\/\/ ==== \[passerby:pure:start\][\s\S]*?\/\/ ==== \[passe
 assert.ok(m, 'marker block not found in index.html');
 
 // 以 new Function 於同一 realm 執行標記區塊（node:vm 會產生跨 realm 的 Array，導致 deepEqual 誤判）
-const { parseCsv, deriveRegion, buildMapsUrl, transformPassersby, transformThreads, isCommunitySource, categoryMatches, reservePasserbySlots, shortStar, groupByRegion, queryCategoryHit, QUERY_AMBIGUOUS, blogLinkFor, BLOG_LINKS, PASSERBY_SNAPSHOT, PASSERBY_SHEET, THREADS_SNAPSHOT, encodeSharePayload, decodeSharePayload } =
-  new Function(m[0] + '\n;return { parseCsv, deriveRegion, buildMapsUrl, transformPassersby, transformThreads, isCommunitySource, categoryMatches, reservePasserbySlots, shortStar, groupByRegion, queryCategoryHit, QUERY_AMBIGUOUS, blogLinkFor, BLOG_LINKS, PASSERBY_SNAPSHOT, PASSERBY_SHEET, THREADS_SNAPSHOT, encodeSharePayload, decodeSharePayload };')();
+const { parseCsv, deriveRegion, buildMapsUrl, transformPassersby, transformThreads, isCommunitySource, categoryMatches, reservePasserbySlots, shortStar, groupByRegion, queryCategoryHit, QUERY_AMBIGUOUS, blogLinkFor, BLOG_LINKS, PASSERBY_SNAPSHOT, PASSERBY_SHEET, THREADS_SNAPSHOT, encodeSharePayload, decodeSharePayload, APP_VERSION, compareVersions } =
+  new Function(m[0] + '\n;return { parseCsv, deriveRegion, buildMapsUrl, transformPassersby, transformThreads, isCommunitySource, categoryMatches, reservePasserbySlots, shortStar, groupByRegion, queryCategoryHit, QUERY_AMBIGUOUS, blogLinkFor, BLOG_LINKS, PASSERBY_SNAPSHOT, PASSERBY_SHEET, THREADS_SNAPSHOT, encodeSharePayload, decodeSharePayload, APP_VERSION, compareVersions };')();
 
 let n = 0;
 function t(name, fn) { fn(); n++; console.log('ok -', name); }
@@ -53,6 +53,14 @@ t('share payload: round-trips Traditional Chinese notes and rejects invalid data
   assert.match(encoded, /^[A-Za-z0-9_-]+$/);
   assert.deepEqual(decodeSharePayload(encoded), payload);
   assert.equal(decodeSharePayload('%%%'), null);
+});
+
+t('version comparison: detects newer, equal, and older releases', () => {
+  assert.equal(APP_VERSION, '1.8.0');
+  assert.equal(compareVersions('1.8.1', APP_VERSION), 1);
+  assert.equal(compareVersions('1.8.0', APP_VERSION), 0);
+  assert.equal(compareVersions('1.7.9', APP_VERSION), -1);
+  assert.equal(compareVersions('2.0', '1.99.99'), 1);
 });
 
 t('transformPassersby: full snapshot', () => {
