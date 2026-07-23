@@ -210,6 +210,30 @@
   .search-field { grid-column: span 1; }
   .filters .count { color: var(--muted); font-size: 12px; white-space: nowrap; padding: 0 5px; }
 
+  .quick-finder {
+    margin-bottom: 14px; padding: 18px; border: 1px solid rgba(255, 152, 110, .22);
+    border-radius: var(--radius-md); background: linear-gradient(145deg, rgba(44, 36, 29, .94), rgba(27, 25, 22, .90));
+    box-shadow: 0 16px 44px rgba(0, 0, 0, .16);
+  }
+  .quick-finder-head { display: flex; align-items: end; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+  .quick-finder-head strong { display: block; font-size: 16px; }
+  .quick-finder-head small { color: var(--muted); font-size: 11px; }
+  .quick-finder-grid { display: grid; grid-template-columns: 1.25fr 1fr 1fr; gap: 16px; }
+  .quick-finder-group > span { display: block; margin-bottom: 7px; color: var(--accent-strong); font-size: 10.5px; font-weight: 800; letter-spacing: .08em; }
+  .quick-finder-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+  .quick-finder-chip {
+    min-height: 34px; padding: 6px 11px; border: 1px solid var(--border); border-radius: 10px;
+    background: rgba(255,255,255,.035); color: var(--muted); font-size: 11.5px; cursor: pointer;
+  }
+  .quick-finder-chip:hover { color: var(--text); border-color: rgba(255,152,110,.45); }
+  .quick-finder-chip.active { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); font-weight: 800; }
+  .quick-finder-chip.utility { color: var(--accent2); border-color: rgba(135,201,255,.28); }
+  .quick-finder-state {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 15px;
+    padding-top: 13px; border-top: 1px solid var(--border); color: var(--text); font-size: 12px;
+  }
+  .quick-finder-state button { border: none; background: none; color: var(--accent-strong); font-size: 11.5px; cursor: pointer; }
+
   .badge-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
   .badge {
     font-size: 10.5px; padding: 3px 9px; border-radius: 999px; background: rgba(255,255,255,.04); color: var(--muted);
@@ -387,6 +411,13 @@
     .rec-input-row button { min-height: 46px; }
     .rec-results { grid-template-columns: 1fr; }
     .country-picker { align-items: flex-start; flex-direction: column; gap: 10px; padding: 13px; }
+    .quick-finder { padding: 14px; }
+    .quick-finder-head { align-items: flex-start; flex-direction: column; gap: 2px; }
+    .quick-finder-grid { grid-template-columns: 1fr; gap: 13px; }
+    .quick-finder-chips { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 3px; scrollbar-width: none; }
+    .quick-finder-chips::-webkit-scrollbar { display: none; }
+    .quick-finder-chip { flex: 0 0 auto; }
+    .quick-finder-state { align-items: flex-start; }
     .country-chips { justify-content: flex-start; }
     .filters { grid-template-columns: 1fr 1fr; padding: 10px; gap: 8px; }
     .filters .search-field { grid-column: 1 / -1; }
@@ -422,7 +453,7 @@
         <span class="brand-mark"><img src="assets/logo-pure.png" alt="純"></span>
         <span>純粹吃東西</span>
       </div>
-      <span class="version-pill">CURATED · v1.7.0</span>
+      <span class="version-pill">CURATED · v1.7.1</span>
     </div>
     <div class="hero-copy">
       <p class="eyebrow">收藏・記錄・分享，一個地方完成</p>
@@ -468,6 +499,18 @@
       </div>
       <div class="country-chips" id="countryChips" role="group" aria-label="依料理國別篩選"></div>
     </section>
+    <section class="quick-finder" aria-labelledby="quickFinderTitle">
+      <div class="quick-finder-head">
+        <div><strong id="quickFinderTitle">快速找餐廳</strong><small>先點條件，不用慢慢打字</small></div>
+        <small>料理、地區、特色可一起選</small>
+      </div>
+      <div class="quick-finder-grid">
+        <div class="quick-finder-group"><span>想吃什麼</span><div class="quick-finder-chips" id="quickCategoryChips"></div></div>
+        <div class="quick-finder-group"><span>想去哪裡</span><div class="quick-finder-chips" id="quickRegionChips"></div></div>
+        <div class="quick-finder-group"><span>怎麼挑</span><div class="quick-finder-chips" id="quickModeChips"></div></div>
+      </div>
+      <div class="quick-finder-state"><span id="quickFinderSummary" aria-live="polite">顯示全部餐廳</span><button type="button" onclick="resetBrowseFilters()">清除所有條件</button></div>
+    </section>
     <div class="fchips" id="catChips"></div>
     <div class="filters">
       <label class="filter-field search-field" for="fSearch"><span>搜尋</span><input type="text" id="fSearch" placeholder="店名、料理或地址" autocomplete="off"></label>
@@ -504,7 +547,7 @@
   </details>
 </div>
 
-<footer>純粹吃東西 · 個人資料只存在這台裝置 · v1.7.0</footer>
+<footer>純粹吃東西 · 個人資料只存在這台裝置 · v1.7.1</footer>
 
 <nav class="mobile-nav" aria-label="快速操作">
   <button type="button" data-go="recommend"><span aria-hidden="true">✨</span>幫我選</button>
@@ -1064,6 +1107,8 @@ function threadsAttributionHtml(d) {
 }
 let currentCat = '';
 let currentCuisine = '';
+let quickCategory = '';
+let quickMode = '';
 let expandedId = null;
 let browseRendered = false;
 const CUISINE_SCENES = [
@@ -1072,6 +1117,13 @@ const CUISINE_SCENES = [
   { id: 'korea', label: '韓國', scene: 'korea', categories: ['韓式料理'] },
   { id: 'southeast', label: '東南亞', scene: 'southeast', categories: ['泰越料理'] },
   { id: 'western', label: '西式', scene: 'western', categories: ['義式/西式'] },
+];
+const QUICK_CATEGORIES = [
+  ['火鍋', '火鍋/鍋物'], ['燒肉', '燒烤/鐵板燒'], ['日式', '日式料理'], ['小吃', '小吃/麵食'],
+  ['早午餐', '早餐/早午餐'], ['甜點', '甜點/飲料'], ['素食', '素食'], ['吃到飽', '吃到飽/自助餐'],
+];
+const QUICK_MODES = [
+  ['rating', '★ 4.5+'], ['journal', '有我的心得'], ['community', '社群推薦'],
 ];
 
 function applyScene(scene = 'taiwan') {
@@ -1096,6 +1148,85 @@ function setCuisine(id) {
   renderCuisineChips();
   expandedId = null;
   renderList();
+}
+
+function quickCategoryLabel(value) {
+  return QUICK_CATEGORIES.find(item => item[1] === value)?.[0] || value;
+}
+
+function topQuickRegions() {
+  const counts = new Map();
+  allData().forEach(d => {
+    if (d.region && d.region !== '未標示地區') counts.set(d.region, (counts.get(d.region) || 0) + 1);
+  });
+  return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'zh-Hant')).slice(0, 7).map(item => item[0]);
+}
+
+function renderQuickFinder(resultCount) {
+  const categoryEl = document.getElementById('quickCategoryChips');
+  const regionEl = document.getElementById('quickRegionChips');
+  const modeEl = document.getElementById('quickModeChips');
+  if (!categoryEl || !regionEl || !modeEl) return;
+  categoryEl.innerHTML = QUICK_CATEGORIES.map(([label, value]) =>
+    `<button type="button" class="quick-finder-chip${quickCategory === value ? ' active' : ''}" aria-pressed="${quickCategory === value}" onclick="setQuickCategory('${value}')">${label}</button>`
+  ).join('');
+  const selectedRegion = document.getElementById('fRegion').value;
+  regionEl.innerHTML = topQuickRegions().map(region =>
+    `<button type="button" class="quick-finder-chip${selectedRegion === region ? ' active' : ''}" aria-pressed="${selectedRegion === region}" onclick="setQuickRegion('${encodeURIComponent(region)}')">${region}</button>`
+  ).join('');
+  modeEl.innerHTML = QUICK_MODES.map(([value, label]) =>
+    `<button type="button" class="quick-finder-chip${quickMode === value ? ' active' : ''}" aria-pressed="${quickMode === value}" onclick="setQuickMode('${value}')">${label}</button>`
+  ).join('') + '<button type="button" class="quick-finder-chip utility" onclick="randomBrowsePick()">🎲 隨機一間</button>';
+
+  const summary = [];
+  const search = document.getElementById('fSearch').value.trim();
+  if (quickCategory) summary.push(quickCategoryLabel(quickCategory));
+  if (selectedRegion) summary.push(selectedRegion);
+  if (quickMode === 'rating') summary.push('4.5 星以上');
+  if (quickMode === 'journal') summary.push('有我的心得');
+  if (quickMode === 'community') summary.push('社群推薦');
+  if (currentCat) summary.push(currentCat);
+  if (showHiddenOnly) summary.push('已隱藏');
+  if (search) summary.push('「' + search + '」');
+  const countText = Number.isFinite(resultCount) ? ` · ${resultCount} 間` : '';
+  document.getElementById('quickFinderSummary').textContent = (summary.length ? '目前：' + summary.join('／') : '顯示全部餐廳') + countText;
+}
+
+function setQuickCategory(value) {
+  quickCategory = quickCategory === value ? '' : value;
+  expandedId = null;
+  renderList();
+}
+
+function setQuickRegion(encodedRegion) {
+  const region = decodeURIComponent(encodedRegion);
+  const select = document.getElementById('fRegion');
+  select.value = select.value === region ? '' : region;
+  expandedId = null;
+  renderList();
+}
+
+function setQuickMode(value) {
+  quickMode = quickMode === value ? '' : value;
+  expandedId = null;
+  renderList();
+}
+
+function resetBrowseFilters() {
+  currentCat = '';
+  currentCuisine = '';
+  quickCategory = '';
+  quickMode = '';
+  showHiddenOnly = false;
+  sharedJournal = null;
+  expandedId = null;
+  document.getElementById('fSearch').value = '';
+  document.getElementById('fRegion').value = '';
+  document.getElementById('fSort').value = 'rating';
+  applyScene('taiwan');
+  populateFilters();
+  renderList();
+  showToast('已清除所有尋找條件');
 }
 
 function starStr(d) {
@@ -1151,6 +1282,7 @@ function populateFilters() {
   fr.innerHTML = '<option value="">全部地區</option>' + regions.map(r => `<option value="${r}">${r}</option>`).join('');
   fr.value = keepRegion;
   renderCuisineChips();
+  renderQuickFinder();
 }
 
 function setCat(c) {
@@ -1262,20 +1394,44 @@ function renderRail(groups) {
   rail.innerHTML = groups.slice(0, 14).map(g => `<button type="button" onclick="jumpRegion('${g.region}')">${g.region}</button>`).join('');
 }
 
-function renderList() {
+function getFilteredBrowseRows() {
   const region = document.getElementById('fRegion').value;
-  const sort = document.getElementById('fSort').value;
   const q = document.getElementById('fSearch').value.trim().toLowerCase();
   const cuisine = CUISINE_SCENES.find(item => item.id === currentCuisine);
-
-  const rows = allData().filter(d => {
+  return allData().filter(d => {
     if (showHiddenOnly !== hiddenRestaurantIds.has(d.id)) return false;
     if (currentCat && !groupsOf(d).includes(currentCat)) return false;
     if (cuisine && cuisine.categories.length && !categoryMatches(d, cuisine.categories, NEED_KEYWORDS)) return false;
+    if (quickCategory && !categoryMatches(d, [quickCategory], NEED_KEYWORDS)) return false;
+    if (quickMode === 'rating' && !(Number(d.rating) >= 4.5)) return false;
+    if (quickMode === 'journal' && !journalFor(d.id).note && !journalFor(d.id).photoUrl) return false;
+    if (quickMode === 'community' && !isCommunitySource(d)) return false;
     if (region && d.region !== region) return false;
     if (q && ![d.name, d.google_name, d.category, d.thread_category, d.address, d.note, d.recommender].filter(Boolean).some(v => String(v).toLowerCase().includes(q))) return false;
     return true;
   });
+}
+
+function randomBrowsePick() {
+  const rows = getFilteredBrowseRows();
+  if (!rows.length) {
+    showToast('目前條件沒有餐廳，先清除一個條件');
+    return;
+  }
+  const restaurant = rows[Math.floor(Math.random() * rows.length)];
+  document.getElementById('fSearch').value = restaurant.name;
+  expandedId = restaurant.id;
+  renderList();
+  requestAnimationFrame(() => {
+    hydratePersonalPhoto(restaurant.id);
+    document.getElementById('grid').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+  showToast('幫你挑了：' + restaurant.name);
+}
+
+function renderList() {
+  const sort = document.getElementById('fSort').value;
+  const rows = getFilteredBrowseRows();
 
   const groups = groupByRegion(rows, sort);
   document.getElementById('resultCount').textContent = rows.length + ' 筆結果';
@@ -1285,6 +1441,7 @@ function renderList() {
       <div class="lgroup-head">${g.region} · ${g.items.length} 間</div>
       ${g.items.map(listRowHtml).join('')}
     </div>`).join('') : '<div class="empty-state">沒有符合條件的餐廳</div>';
+  renderQuickFinder(rows.length);
   renderSharedLinkBanner();
   renderRail(groups);
   browseRendered = true;
@@ -1331,6 +1488,8 @@ function openSharedLink() {
   };
   currentCat = '';
   currentCuisine = '';
+  quickCategory = '';
+  quickMode = '';
   showHiddenOnly = hiddenRestaurantIds.has(payload.id);
   activateTab('browse', true);
   populateFilters();
